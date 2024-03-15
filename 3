@@ -1,0 +1,139 @@
+use Firma 
+select * from CATEGORII_PROD
+select * from PRODUSE
+select * from VANZARI
+select * from angajati
+--1. Scrieți și testați o funcție care returnează angajații a căror funcții conține o secvență de caractere primită ca parametru ?
+
+CREATE FUNCTION dbo.udf_returnangajati1 (@parametru varchar(20))
+RETURNS TABLE
+AS
+RETURN
+SELECT a.Nume, a.Prenume, F.DENUMIRE
+FROM ANGAJATI a INNER JOIN FUNCTII f ON a.IdFunctie = f.IdFunctie
+WHERE f.Denumire LIKE '%' + @parametru + '%'
+end
+
+SELECT * FROM dbo.udf_returnangajati1('ngi')
+
+--2. Scrieți și testați o funcție care returnează salariile dintr-un departament primit ca parametru? Câți angajați beneficiază de fiecare salariu?
+
+CREATE FUNCTION dbo.udf_salariufctdepartament(@departament VARCHAR(20))
+RETURNS TABLE
+AS
+RETURN
+    SELECT f.Salariu,COUNT(a.IdAngajat) AS NumarAngajati
+    FROM ANGAJATI A JOIN DEPARTAMENTE D ON A.IdDept = D. IdDept JOIN Functii F ON A.IdFunctie = F.IdFunctie
+    WHERE D.Denumire = @departament
+    GROUP BY f.Salariu
+end
+SELECT * FROM dbo.udf_salariufctdepartament('proiectare')
+
+--3. Scrieți și testați o funcție care returnează salariul minim și maxim dintr-un departament primit ca parametru?
+
+CREATE FUNCTION dbo.udf_salariuminim(@departament VARCHAR(20))
+RETURNS decimal
+AS
+begin
+ declare @minim decimal;
+ SELECT @minim=MIN(F.SALARIU)
+ FROM ANGAJATI A JOIN DEPARTAMENTE D ON A.IdDept = D. IdDept JOIN Functii F ON A.IdFunctie = F.IdFunctie
+ WHERE D.Denumire = @departament
+return @minim
+end
+
+SELECT dbo.udf_salariuminim('PRODUCTIE') salmin
+
+CREATE FUNCTION dbo.udf_salariumax(@departament VARCHAR(20))
+RETURNS decimal
+AS
+begin
+ declare @max decimal;
+ SELECT @max=MIN(F.SALARIU)
+ FROM ANGAJATI A JOIN DEPARTAMENTE D ON A.IdDept = D. IdDept JOIN Functii F ON A.IdFunctie = F.IdFunctie
+ WHERE D.Denumire = @departament
+return @max
+end
+
+SELECT dbo.udf_salariumax('PRODUCTIE') salmax
+
+--4. Scrieți și testați o funcție care returnează produsele vândute într-o anumită perioadă de timp? Limitele perioadei de timp sunt trimise ca parametri către funcție.
+
+CREATE FUNCTION dbo.udf_produsevanduteperioada(@StartDate DATE, @EndDate DATE)
+RETURNS TABLE
+AS
+RETURN
+    SELECT P.Denumire 
+    FROM VANZARI V
+    INNER JOIN PRODUSE P ON V.IDProdus = P.IDProdus
+    WHERE V.DataVanz BETWEEN @StartDate AND @EndDate
+
+SELECT * FROM dbo.udf_produsevanduteperioada('2018-01-01', '2020-12-31')
+
+--5. Scrieți și testați o funcție care returnează suma totală încasată de un vânzător al cărui nume este trimis ca parametru. Scrieți si testați o funcție care se bazează pe prima și care verifică  dacă suma depășește un anumit prag minim trimis ca parametru. Afișați angajații care au  vândut produse în valoare mai mare decât 100 RON.
+
+CREATE FUNCTION dbo.udf_sumavanzator1(@vanzator VARCHAR(50))
+RETURNS DECIMAL
+AS
+BEGIN
+    DECLARE @vanzari DECIMAL;
+
+    SELECT @vanzari = SUM(V.PretVanz * V.NrProduse)
+    FROM VANZARI V
+    INNER JOIN ANGAJATI A ON V.IDVanzator = A.IdAngajat
+    WHERE A.Nume= @vanzator;
+
+    RETURN @vanzari
+END
+
+SELECT dbo.udf_sumavanzator1('n22') sumatotala
+
+CREATE FUNCTION dbo.udf_sumavanzator2(@vanzator VARCHAR(50), @prag INT)
+RETURNS BIT
+AS
+BEGIN
+    DECLARE @vanzari DECIMAL;
+
+    SELECT @vanzari = SUM(V.PretVanz * V.NrProduse)
+    FROM VANZARI V
+    INNER JOIN ANGAJATI A ON V.IDVanzator = A.IdAngajat
+    WHERE A.Nume = @vanzator;
+
+    IF @vanzari > @prag RETURN 1
+    ELSE RETURN 0
+END
+
+SELECT dbo.udf_sumavanzator2('n22', 10)
+
+SELECT A.Nume, A.Prenume, dbo.udf_sumavanzator2(A.Nume, 100) AS A_vandut_mai_mult_de_100_RON
+FROM ANGAJATI A
+WHERE dbo.udf_sumavanzator2(A.Nume, 100) = 1
+
+
+--6. Scrieți și testați o funcție care returnează cele mai vândute N produse, într-o anumită perioadă de timp. Valoarea lui N și limitele perioadei de timp sunt trimise ca parametri către funcție.
+
+CREATE FUNCTION dbo.udf_cele_mai_vandute_produse (@N INT,@StartDate DATE, @EndDate DATE)
+RETURNS TABLE
+AS
+RETURN
+    SELECT TOP (@N) P.Denumire AS NumeProdus, SUM(V.NrProduse) AS CantitateVanduta
+    FROM VANZARI V INNER JOIN PRODUSE P ON V.IDProdus = P.IDProdus
+    WHERE V.DataVanz BETWEEN @StartDate AND @EndDate
+    GROUP BY P.Denumire
+    ORDER BY CantitateVanduta DESC
+
+SELECT * FROM dbo.udf_cele_mai_vandute_produse(3, '2018-01-01', '2019-12-31')
+
+--7. Scrieți și testați o funcție care returnează clienții ordonați descrescător după sumele cheltuite, într-o anumită perioadă de timp ale cărei limite sunt trimise ca parametri
+
+CREATE FUNCTION dbo.udf_clienti_suma_cheltuita(@StartDate DATE, @EndDate DATE)
+RETURNS TABLE
+AS
+RETURN
+    SELECT TOP 100 PERCENT C.IdClient,C.Denumire AS NumeClient,SUM(V.PretVanz * V.NrProduse) AS SumaCheltuita
+    FROM CLIENTI C JOIN VANZARI V ON C.IdClient = V.IDClient AND V.DataVanz BETWEEN @StartDate AND @EndDate
+    GROUP BY C.IdClient, C.Denumire
+    ORDER BY SumaCheltuita DESC
+
+
+SELECT *FROM dbo.udf_clienti_suma_cheltuita('2018-01-01', '2019-12-31');
